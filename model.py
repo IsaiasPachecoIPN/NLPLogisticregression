@@ -1,13 +1,8 @@
 import  pickle
 import  utils
-import  math
 import  numpy               as np
-import  pandas              as pd
 import  matplotlib.pyplot   as plt
 import  seaborn             as sns
-import  time
-
-from    bs4                 import BeautifulSoup
 from    sklearn.metrics     import confusion_matrix
 
 class LogisticRegressor:
@@ -43,17 +38,6 @@ class LogisticRegressor:
             self.data += open(doc, 'r').read()
         # self.data = [open(doc, 'r', encoding="UTF-8").read() doc for document in path]
 
-    def parse_text(self, verbose=False):
-
-        """
-        Parse the thex fron the htm using BeautifulSoup
-        """
-
-        soup = BeautifulSoup(self.data, 'lxml')
-        self.data = soup.get_text()    
-
-        if verbose:
-            print(f'Parsed text: {self.data}')
 
     def build_dataset(self, verbose=False):
         """
@@ -303,6 +287,15 @@ class LogisticRegressor:
         #Calculate the accuracy
         accuracy = np.sum((y_hat > 0.5) == self.Y) / len(self.Y)
 
+        #calculate precision
+        tp = np.sum((y_hat > 0.5) & (self.Y == 1))
+        fp = np.sum((y_hat > 0.5) & (self.Y == 0))
+        precision = tp / (tp + fp)
+
+        #Calculate recall
+        fn = np.sum((y_hat < 0.5) & (self.Y == 1))
+        recall = tp / (tp + fn)
+
         #Create confusion matrix
         cm = confusion_matrix(self.Y, y_pred)
         sns.heatmap(cm, annot=True, fmt='g',)
@@ -314,3 +307,6 @@ class LogisticRegressor:
 
         if verbose:
             print(f'Accuracy: {accuracy}')
+            print(f'Precision: {precision}')
+            print(f'Recall: {recall}')
+            
