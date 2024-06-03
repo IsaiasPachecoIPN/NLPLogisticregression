@@ -56,4 +56,4 @@ nlp.predict(verbose=True)
 
 ![Alt text](https://github.com/IsaiasPachecoIPN/NLPLogisticregression/blob/main/images/output.jpg "Output Example")
 
-![Alt text](https://github.com/IsaiasPachecoIPN/NLPLogisticregression/blob/main/images/output_2.jpg "Output Example")
+![Alt text](https://github.com/IsaiasPachecoIPN/NLPLogisticregression/blob/main/images/output._2.jpg "Output Example")
