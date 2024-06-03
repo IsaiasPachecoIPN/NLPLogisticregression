@@ -1,10 +1,14 @@
 import  pickle
 import  utils
 import  math
-import  numpy       as np
-import  pandas      as pd
-from    bs4         import BeautifulSoup
+import  numpy               as np
+import  pandas              as pd
+import  matplotlib.pyplot   as plt
+import  seaborn             as sns
+import  time
 
+from    bs4                 import BeautifulSoup
+from    sklearn.metrics     import confusion_matrix
 
 class LogisticRegressor:
 
@@ -24,6 +28,7 @@ class LogisticRegressor:
         self.word_count_probabilities   = None
         self.X                          = None
         self.Y                          = None
+        self.weights                    = None
 
     def load_dataset(self, path, verbose=False):
 
@@ -110,7 +115,8 @@ class LogisticRegressor:
 
             #Save the preprocessed text
             with open('./output/preprocessed_text.txt', 'w') as f:
-                f.write(self.X)
+                for text in self.X:
+                    f.write(text.strip() + '\n')
 
             print(f'Preprocessed text created')
 
@@ -138,8 +144,9 @@ class LogisticRegressor:
 
         except:
             self.vocabulary = set()
-            for text in self.data.split():
-                self.vocabulary.add(text)
+            for sentence in self.X:
+                for text in sentence.split():
+                    self.vocabulary.add(text)
 
             #save vocabulary
             with open('./output/vocabulary.pkl', 'wb') as f:
@@ -148,131 +155,162 @@ class LogisticRegressor:
             print(f'Vocabulary created')
 
         if verbose:
-            # print(f'Vocabulary: {self.vocabulary}')
-            print(f'Vocabulary size: {len(self.vocabulary)}')
+            print(f'Vocabulary: {self.vocabulary}')
 
-    def build_background_language_model_probabilities(self, verbose=False):
+        print(f'Vocabulary size: {len(self.vocabulary)}')
+
+    def word_count_vectorizer(self, verbose=False, override=False):
 
         """
-        Build the language model for topic mining
+        Function to create the word count vectorizer
         """
 
-        print(f'Building language model for topic mining')
+        #Check if the word count already exists
+        try:
+            if override:
+                raise Exception("Override")
+            with open('./output/word_count.pkl', 'rb') as f:
+                self.word_count = pickle.load(f)
+                self.word_count = self.word_count.T
+            print(f'Word count loaded')
+        except:
 
-        #Word count
-        self.word_count = {}
-        for word in self.data.split():
-            if word in self.word_count:
-                self.word_count[word] += 1
-            else:
-                self.word_count[word] = 1
+            self.word_count = np.zeros((len(self.X), len(self.vocabulary)))
 
-        # print(f'Word count: {self.word_count}')
+            #Count total words on the X values
+            counter = 0 
+            m = len(self.Y)
 
-        self.word_count_probabilities = {}
-        #Total number of words
-        N = len(self.data.split())
+            for i, sentence in enumerate(self.X):
+                for j, word in enumerate(self.vocabulary):
+                    self.word_count[i, j] = sentence.split().count(word)
 
-        #Normalize Each word count
-        for word, freq in self.word_count.items():
-            self.word_count_probabilities[word] = freq/N
+            #Save the word count
+            with open('./output/word_count.pkl', 'wb') as f:
+                pickle.dump(self.word_count, f)
 
-        sum = 0
-        for word, freq in self.word_count_probabilities.items():
-            sum += freq
+            self.word_count = self.word_count.T
+            print(f'Word count created')
+
+        #Prin the sum of the first row
+        if verbose:
+            print(f'Word count: {self.word_count}')
+
+    def fit(self, num_iterations=1000, learning_rate=0.1, verbose=False, override=False):
+        """
+        Function to fit the model using X, Y
+        """
+
+        #Check if the weights already exists
+        try:
+            if override:   
+                raise Exception("Override")
+            with open('./output/weights.pkl', 'rb') as f:
+                self.weights = pickle.load(f)
+            print(f'Weights loaded')
+        except:
+
+            plt.ion()
+
+            plot_x = []
+            plot_y = []
+
+            # Crear una figura y un eje
+            fig, ax = plt.subplots()
+
+            ax.set_xlim(0, num_iterations)
+            ax.set_ylim(0, 10)
+
+            # Línea inicial vacía
+            line, = ax.plot(plot_x, plot_y, 'r-')  # 'r-' es el estilo de línea roja
+
+            plt.title('Cost function')
+            plt.xlabel('Iterations')
+            plt.ylabel('Cost')
+
+            def update_cost(new_x, new_y):
+                plot_x.append(new_x)
+                plot_y.append(new_y)
+                line.set_xdata(plot_x)
+                line.set_ydata(plot_y)
+                ax.relim()
+                ax.autoscale_view()
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+
+            #initialize the weights with random values
+            weights = np.random.rand(len(self.vocabulary))
+
+            #learning rate
+            alpha = learning_rate
+
+            self.Y = np.array(self.Y)
+
+            print(f'Weights shape: {weights.shape}')
+            print(f'Word count shape: {self.word_count.shape}')
+            print(f'Weights: {weights}') 
+
+            m = len(self.Y)
+
+            for i in range(num_iterations):
+                
+                #Calculate z
+                z = np.dot(weights.T, self.word_count)
+                
+                #Calculate y_hat 
+                y_hat = 1 / (1 + np.exp(-z))
+
+                #calculate the cost
+                cost = -1* np.sum(self.Y * np.log(y_hat) + (1 - self.Y) * np.log(1 - y_hat))  / m
+
+                #Calculate the gradient
+                gradient = np.dot(self.word_count, (y_hat - self.Y).T) / m
+
+                #Update the weights
+                weights = weights - alpha * gradient
+
+                update_cost(i, cost)
+                print(f'\rCost: {cost}', end='')
+
+            
+            self.weights = weights
+
+            print(f'\nWeights calculated: {self.weights}')
+            plt.ioff()
+            plt.show()
+
+    def predict(self, verbose=False):
+
+        """
+        Function to make the preduiction and calculate accuracy
+        """
         
-        print(f'Sum: {sum}')
+        #Calculate z
+        z = np.dot(self.weights.T, self.word_count)
 
-        #Order the word count
-        self.word_count_probabilities = dict(sorted(self.word_count_probabilities.items(), key=lambda item: item[1], reverse=True))
+        #Calculate y_hat 
+        y_hat = 1 / (1 + np.exp(-z))
 
-        #Print the first n words
-        count = 0
-        count_breaker = 5
-        for word, freq in self.word_count_probabilities.items():
-            print(f'{word}: {freq}')
-            count += 1
-            if count == count_breaker:
-                break    
-    
-    def calculate_em_steps(self, steps=1, verbose=False):
+        y_pred = np.zeros(len(y_hat))
+        for i in range(len(y_hat)):
+            y_pred[i] = 1 if y_hat[i] > 0.5 else 0
 
-        """
-        Calculate the EM steps using the background language model
-        """
+        #Print the prediction
+        if verbose:
+            for i in range(50):
+                print(f'Prediction: {0 if y_hat[i] < 0.5 else 1 } Real: {self.Y[i]}')
 
-        #Probability of the topic language model
-        p_theta_d = 0.5 
-        
-        #Probability of the background language model
-        p_theta_B = 0.5
+        #Calculate the accuracy
+        accuracy = np.sum((y_hat > 0.5) == self.Y) / len(self.Y)
 
-        w_p_theta_d = {word: 1/(len(self.vocabulary)*2) for word in self.vocabulary}
-        
-        global_log_likelihood = 0
+        #Create confusion matrix
+        cm = confusion_matrix(self.Y, y_pred)
+        sns.heatmap(cm, annot=True, fmt='g',)
 
-        for step in range(steps):
-            p_w_z_0_steps = {}
-
-            print(f"él: {w_p_theta_d['él']} - de: {w_p_theta_d['de']} - que: {w_p_theta_d['que']} - en: {w_p_theta_d['en']} - méxico: {w_p_theta_d['méxico']} - pri: {w_p_theta_d['pri']} - nacional: {w_p_theta_d['nacional']} - país: {w_p_theta_d['país']}")
-
-            for word in ["él", "de", "que", "en", "méxico", "pri", "nacional", "país"]:
-                #Calculate the E step
-                p_w_z_0 = ( p_theta_d * w_p_theta_d[word] ) / ( p_theta_d * w_p_theta_d[word] + p_theta_B * self.word_count_probabilities[word] )
-                p_w_z_0_steps[word] = p_w_z_0
-                print(f'p_w_z_0: {p_w_z_0}')
-
-            #Sum of the p_w_z_0 * wcounts
-            wc_p_w_z_0_sum = sum(self.word_count[word] * p_w_z_0_steps[word] for word in ["él", "de", "que", "en", "méxico", "pri", "nacional", "país"])
-
-            #Update the w_p_theta_d probabilities
-            for word in ["él", "de", "que", "en", "méxico", "pri", "nacional", "país"]:
-                w_p_theta_d[word] = ( self.word_count[word] * p_w_z_0_steps[word] ) / wc_p_w_z_0_sum
-                # w_p_theta_d[word] = 1 - p_w_z_0_steps[word]
-
-            # # Calculate the log-likelihood
-            # log_likelihood = sum(self.word_count[word] * np.log(p_theta_d * w_p_theta_d[word] + p_theta_B * self.word_count_probabilities[word]) for word in self.vocabulary)
-
-            # if global_log_likelihood == log_likelihood:
-            #     break
-            # else:
-            #     global_log_likelihood = log_likelihood
-
-            # if verbose:
-            #     print(f'EM Step [{step}] Log-Likelihood: {log_likelihood}')
-
-        #Sort the w_p_theta_d probabilities
-        w_p_theta_d = dict(sorted(w_p_theta_d.items(), key=lambda item: item[1], reverse=True))
-
-        # #Remove the stop words
-        # stop_words = open('./src/spanish.txt', 'r', encoding='utf-8').read().splitlines()
-        # w_p_theta_d = {word: freq for word, freq in w_p_theta_d.items() if word not in stop_words}
+        plt.title('Confusion matrix')
+        plt.xlabel('Predicted')
+        plt.ylabel('Real')
+        plt.show()
 
         if verbose:
-            print(f'Word distribution after {steps} EM steps:')
-
-            #Print the first n words
-            count = 0
-            count_breaker = 15
-
-            #Save the word distribution and the background distribution in a dataframe to compare
-            df = pd.DataFrame()
-            df['Word distribution'] = [f'{word}:{freq}' for word,freq in list(w_p_theta_d.items())[:count_breaker]]
-            df['Background distribution'] = [f'{word}:{freq}' for word,freq in list(self.word_count_probabilities.items())[:count_breaker]]
-
-            print(df)
-
-            # for wd, bd in zip(w_p_theta_d.items(), self.word_count_probabilities.items()):
-            #     print(f'{wd}: {bd}')
-            #     count += 1
-            #     if count == count_breaker:
-            #         break
-
-            # print(f'Background distribution')
-
-            # count = 0
-            # for word, freq in self.word_count_probabilities.items():
-            #     print(f'{word}: {freq}')
-            #     count += 1
-            #     if count == count_breaker:
-            #         break
+            print(f'Accuracy: {accuracy}')
