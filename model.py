@@ -285,16 +285,18 @@ class LogisticRegressor:
                 print(f'Prediction: {0 if y_hat[i] < 0.5 else 1 } Real: {self.Y[i]}')
 
         #Calculate the accuracy
-        accuracy = np.sum((y_hat > 0.5) == self.Y) / len(self.Y)
+        # accuracy = np.sum((y_hat > 0.5) == self.Y) / len(self.Y)
 
         #calculate precision
         tp = np.sum((y_hat > 0.5) & (self.Y == 1))
         fp = np.sum((y_hat > 0.5) & (self.Y == 0))
-        precision = tp / (tp + fp)
-
-        #Calculate recall
         fn = np.sum((y_hat < 0.5) & (self.Y == 1))
+        tn = np.sum((y_hat < 0.5) & (self.Y == 0))
+
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        precision = tp / (tp + fp)
         recall = tp / (tp + fn)
+        f1 = 2 * (precision * recall) / (precision + recall)
 
         #Create confusion matrix
         cm = confusion_matrix(self.Y, y_pred)
@@ -306,7 +308,8 @@ class LogisticRegressor:
         plt.show()
 
         if verbose:
-            print(f'Accuracy: {accuracy}')
-            print(f'Precision: {precision}')
-            print(f'Recall: {recall}')
+            print(f'Accuracy:\t {accuracy}')
+            print(f'Precision:\t {precision}')
+            print(f'Recall:\t {recall}')
+            print(f'F1:\t {f1}')
             
